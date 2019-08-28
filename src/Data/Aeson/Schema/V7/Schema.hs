@@ -1,8 +1,16 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+-- Unfornate @Enum@ instance below
+
 module Data.Aeson.Schema.V7.Schema where
 
+import Prelude hiding (minimum, maximum)
+
 import qualified Data.Aeson as Aeson
+import           Data.Maybe (fromMaybe)
+import qualified Data.Range.Algebra as R.A
+import qualified Data.Range.Range as R
 import           Data.Text (Text)
-import           Data.Scientific (Scientific)
+import           Data.Scientific (Scientific, scientific, toBoundedInteger)
 import           Data.HashMap.Strict (HashMap)
 
 data SchemaType
@@ -54,6 +62,53 @@ type Number = Scientific
 data ExclusiveSchema
   = DoExclude Bool
   | ExcludeBoundary Number
+
+instance Enum Scientific where
+  succ x = x + (scientific 1 1)
+  pred x = x - (scientific 1 1)
+
+  toEnum = (`scientific` 1) . toInteger
+  fromEnum = fromMaybe (maxBound) . toBoundedInteger
+
+  enumFrom n = iterate succ n
+  enumFromThen n n'
+    = let diff = n' - n
+      in iterate (\x -> x + diff) n
+  enumFromTo n m
+    = takeWhile (<= m) (enumFrom n)
+  enumFromThenTo n n' m
+    = let diff = n' - n
+      in takeWhile (if diff < 0 then (>= m) else (<= m)) (enumFromThen n n')
+
+type Range = R.A.RangeExpr [R.Range Number]
+
+buildRanges :: NumberSchema -> [R.Range Number]
+buildRanges NumberSchema{..}
+  = R.A.eval $ foldr1 R.A.intersection
+      [ valueToRange minimum makeMinimum
+      , valueToRange maximum makeMaximum
+      , exclusiveSchemaToRange exclusiveMinimum minimum makeMinimum
+      , exclusiveSchemaToRange exclusiveMaximum maximum makeMaximum
+      ]
+  where
+    makeMinimum = R.A.const . (:[]) . R.LowerBoundRange
+    makeMaximum = R.A.const . (:[]) . R.UpperBoundRange
+
+    valueToRange :: Maybe Number -> (Number -> Range) -> Range
+    valueToRange (Just val) makeRange
+      = makeRange val
+    valueToRange Nothing _
+      = R.A.const [R.InfiniteRange]
+
+    exclusiveSchemaToRange :: Maybe ExclusiveSchema -> Maybe Number -> (Number -> Range) -> Range
+    exclusiveSchemaToRange (Just (DoExclude True)) (Just bound) makeRange
+      = valueToRange (Just bound) makeRange `R.A.difference` R.A.const [R.SingletonRange bound]
+    exclusiveSchemaToRange (Just (DoExclude _)) maybeBound makeRange
+      = valueToRange maybeBound makeRange
+    exclusiveSchemaToRange (Just (ExcludeBoundary val)) _ makeRange
+      = makeRange val `R.A.difference` R.A.const [R.SingletonRange val]
+    exclusiveSchemaToRange Nothing _ _
+      = R.A.const [R.InfiniteRange]
 
 data ObjectSchema
   = ObjectSchema

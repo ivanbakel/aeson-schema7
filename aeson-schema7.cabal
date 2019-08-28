@@ -23,8 +23,9 @@ library
                      , aeson
                      , aeson-better-errors
                      , aeson-qq
-                     , text
+                     , range
                      , scientific
+                     , text
                      , unordered-containers
                      , vector
   ghc-options:         -Wall

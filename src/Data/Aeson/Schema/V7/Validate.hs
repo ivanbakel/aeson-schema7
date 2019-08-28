@@ -4,13 +4,14 @@ module Data.Aeson.Schema.V7.Validate
 
 import Data.Aeson.Schema.V7.Schema
 
-import Prelude hiding (const, id, length, minimum, maximum, not)
+import Prelude hiding (const, id, length, map, min, minimum, max, maximum, not)
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Bool as B (not)
 import qualified Data.HashMap.Strict as HM (lookup, keys, member, size, toList)
 import qualified Data.List as L (length, nub)
 import           Data.Maybe (fromMaybe)
+import qualified Data.Range.Range as R
 import           Data.Scientific (isInteger)
 import qualified Data.Text as T (length)
 import qualified Data.Vector as V (toList)
@@ -43,8 +44,8 @@ validate Schema{..} value = and $
   , checkMaybe oneOf \schemas ->
       exactlyOne (flip validate $ value) schemas
 
-  , checkMaybe not \schema ->
-      B.not (validate schema value)
+  , checkMaybe not \invertedSchema ->
+      B.not (validate invertedSchema value)
 
   , checkMaybe ifThenElse \IfThenElseSchema{..} ->
       if validate ifS value
@@ -67,109 +68,99 @@ validate Schema{..} value = and $
           Nothing
           list
 
-validateString StringSchema{..} (Aeson.String string) = and $
-  [ checkMaybe minLength \min -> min <= stringLength
-  , checkMaybe maxLength \max -> max >= stringLength
+    validateString StringSchema{..} (Aeson.String string) = and $
+      [ checkMaybe minLength \min -> min <= stringLength
+      , checkMaybe maxLength \max -> max >= stringLength
 
-  , True -- TODO : pattern checks
-  , True -- TODO : format checks
-  , True -- TODO : media type checks?
-  , True -- TODO : encoding checks?
-  ]
+      , True -- TODO : pattern checks
+      , True -- TODO : format checks
+      , True -- TODO : media type checks?
+      , True -- TODO : encoding checks?
+      ]
 
-  where
-    stringLength = T.length string
-validateString stringSchema _ = False
+      where
+        stringLength = T.length string
+    validateString _ _ = False
 
-validateInteger integerSchema (Aeson.Number number)
-  = isInteger number && validateNumber integerSchema (Aeson.Number number)
-validateInteger integerSchema _ = False
+    validateInteger integerSchema (Aeson.Number number)
+      = isInteger number && validateNumber integerSchema (Aeson.Number number)
+    validateInteger _ _ = False
 
-validateNumber NumberSchema{..} (Aeson.Number number) = and $
-  [ checkMaybe multipleOf \divisor -> False -- TODO
+    validateNumber numberSchema@NumberSchema{..} (Aeson.Number number) = and $
+      [ checkMaybe multipleOf \_divisor -> False -- TODO
 
-  , checkMaybe minimum \min -> min <= number
-  , checkMaybe exclusiveMinimum \case
-      DoExclude True -> 
-        checkMaybe minimum \min -> min < number
-      DoExclude False -> True
-      ExcludeBoundary boundary -> boundary < number
+      , R.inRanges (buildRanges numberSchema) number
 
-  , checkMaybe maximum \max -> max >= number
-  , checkMaybe exclusiveMaximum \case
-      DoExclude True -> 
-        checkMaybe maximum \max -> max > number
-      DoExclude False -> True
-      ExcludeBoundary boundary -> boundary > number
+      ]
 
-  ]
+    validateNumber _ _ = False
 
-validateNumber numberSchema _ = False
+    validateObject ObjectSchema{..} (Aeson.Object map) = and $
+      [ checkMaybe properties \PropertiesSchema{..} ->
+        all (\(key, propertyValue) ->
+                maybe
+                  True
+                  (flip validate propertyValue)
+                  (HM.lookup key propertiesSchema))
+            (HM.toList map)
 
-validateObject ObjectSchema{..} (Aeson.Object map) = and $
-  [ checkMaybe properties \PropertiesSchema{..} ->
-    all (\(key, value) -> 
-            maybe
-              True
-              (flip validate value)
-              (HM.lookup key propertiesSchema))
-        (HM.toList map)
+      , checkMaybe additionalProperties \additionalSchema ->
+          all (\(key, additionalValue) ->
+                  if maybe False (HM.member key . propertiesSchema) properties
+                      then True
+                      else validate additionalSchema additionalValue)
+              (HM.toList map)
 
-  , checkMaybe additionalProperties \schema ->
-      all (\(key, value) -> 
-              if maybe False (HM.member key . propertiesSchema) properties
-                  then True
-                  else validate schema value)
-          (HM.toList map)
+      , checkMaybe requiredProperties \required ->
+          all (`elem` HM.keys map) required
 
-  , checkMaybe requiredProperties \required ->
-      all (`elem` HM.keys map) required
+      , checkMaybe propertyNames \nameSchema ->
+          all (validateString nameSchema . Aeson.String) (HM.keys map)
 
-  , checkMaybe propertyNames \nameSchema ->
-      all (validateString nameSchema . Aeson.String) (HM.keys map)
+      , checkMaybe patternProperties \PatternPropertiesSchema{} ->
+          True -- TODO: pattern checks
 
-  , checkMaybe patternProperties \PatternPropertiesSchema{} ->
-      True -- TODO: pattern checks
+      , checkMaybe minProperties \min ->
+          HM.size map >= min
 
-  , checkMaybe minProperties \min ->
-      HM.size map >= min
+      , checkMaybe maxProperties \max ->
+          HM.size map <= max
 
-  , checkMaybe maxProperties \max ->
-      HM.size map <= max
+      ]
 
-  ]
+    validateObject _ _ = False
 
-validateObject objectSchema _ = False
+    validateArray ArraySchema{..} (Aeson.Array arrayVec) = and $
+      [ checkMaybe items \case
+          ListSchema{..} ->
+            all (validate listSchema) array
+          TupleSchema{} -> False -- TODO
 
-validateArray ArraySchema{..} (Aeson.Array arrayVec) = and $
-  [ checkMaybe items \case
-      ListSchema{..} ->
-        all (validate listSchema) array
-      TupleSchema{} -> False -- TODO
+      , checkMaybe contains \containsSchema ->
+          any (validate containsSchema) array
 
-  , checkMaybe contains \containsSchema ->
-      any (validate containsSchema) array
+      , checkMaybe minItems \min ->
+          L.length array >= min
+      , checkMaybe maxItems \max ->
+          L.length array <= max
 
-  , checkMaybe minItems \min ->
-      L.length array >= min
-  , checkMaybe maxItems \max ->
-      L.length array <= max
+      , checkMaybe uniqueItems \case
+          False -> True
+          True -> (L.nub array) == array
 
-  , checkMaybe uniqueItems \case
-      False -> True
-      True -> (L.nub array) == array
+      ]
 
-  ]
+      where
+        array = V.toList arrayVec
 
-  where
-    array = V.toList arrayVec
+    validateArray _ _ = False
 
-checkMaybe = flip (maybe True)
+    checkMaybe = flip (maybe True)
 
-aesonTypeOf :: Aeson.Value -> SchemaType
-aesonTypeOf (Aeson.Object _) = ObjectType
-aesonTypeOf (Aeson.Array _)  = ArrayType
-aesonTypeOf (Aeson.String _) = StringType
-aesonTypeOf (Aeson.Number _) = NumberType
-aesonTypeOf (Aeson.Bool _)   = BooleanType
-aesonTypeOf Aeson.Null       = NullType
+    aesonTypeOf :: Aeson.Value -> SchemaType
+    aesonTypeOf (Aeson.Object _) = ObjectType
+    aesonTypeOf (Aeson.Array _)  = ArrayType
+    aesonTypeOf (Aeson.String _) = StringType
+    aesonTypeOf (Aeson.Number _) = NumberType
+    aesonTypeOf (Aeson.Bool _)   = BooleanType
+    aesonTypeOf Aeson.Null       = NullType

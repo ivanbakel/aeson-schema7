@@ -158,9 +158,13 @@ asNumberSchema = do
         "The boolean form of `exclusiveMaximum` makes no sense without a value for\
         \ `maximum`, and will be ignored"
 
-  -- TODO: Warn about nonsense bounds, like minimum greater than maximum
+  let numberSchema = NumberSchema{..}
 
-  pure NumberSchema{..}
+  case buildRanges numberSchema of
+    [] -> warn "This combination of bounds results in an empty range!"
+    _  -> pure ()
+
+  pure numberSchema
 
 asNumber :: (ParserMonad m) => Parser m Number
 asNumber = Aeson.BE.asScientific
