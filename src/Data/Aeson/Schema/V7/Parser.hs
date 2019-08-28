@@ -73,7 +73,9 @@ asStringSchema = do
   contentMediaType <- useKey "contentMediaType" asMediaType
   contentEncoding <- useKey "contentEncoding" asEncoding
 
-  -- TODO: Warn about nonsense bounds, like minimum greater than maximum
+  if badBounds minLength maxLength
+    then warn "`minLength` is greater than `maxLength` - the schema is unsatisfiable!"
+    else pure ()
 
   pure StringSchema{..}
 
@@ -102,6 +104,9 @@ asEncoding
      "quoted-printable" -> Right QuotedPrintable
      "base64" -> Right Base64
      other    -> Left ("unknown encoding `" <> other <> "`")
+
+badBounds :: Maybe Count -> Maybe Count -> Bool
+badBounds smaller bigger = fromMaybe False ((>) <$> smaller <*> bigger)
 
 asNumberSchema :: (ParserMonad m) => Parser m NumberSchema
 asNumberSchema = do
@@ -188,7 +193,15 @@ asObjectSchema = do
   minProperties <- useKey "minProperties" asCount
   maxProperties <- useKey "maxProperties" asCount
 
-  -- TODO: Warn about nonsense bounds
+  if badBounds minProperties maxProperties
+    then warn "`minProperties` is greater than `maxProperties` - the schema is unsatisfiable!"
+    else pure ()
+
+  if maxProperties < (length <$> requiredProperties)
+    then warn
+          "There are more properties in `requiredProperties` than are allowed by\
+          \ `maxProperties` - the schema is unsatisfiable!"
+    else pure ()
 
   pure ObjectSchema{..}
 
@@ -212,10 +225,6 @@ asArraySchema = do
   items <- useKey "items" asItemsSchema
   contains <- useKey "contains" asSchema
   additionalItems <- useKey "additionalItems" asSchema
-  minItems <- useKey "minItems" asCount
-  maxItems <- useKey "maxItems" asCount
-  -- TODO: warn about nonsense bounds
-  uniqueItems <- useKey "uniqueItems" asFlag
 
   case items of
     Just (ListSchema _) -> do
@@ -229,6 +238,15 @@ asArraySchema = do
       pure ()
 
     Nothing -> pure ()
+
+  minItems <- useKey "minItems" asCount
+  maxItems <- useKey "maxItems" asCount
+
+  if badBounds minItems maxItems
+    then warn "`minItems` is greater than `maxItems` - the schema is unsatisfiable!"
+    else pure ()
+
+  uniqueItems <- useKey "uniqueItems" asFlag
 
   -- TODO: Warn about detectable errs, like contains being unsatisfiable
 
