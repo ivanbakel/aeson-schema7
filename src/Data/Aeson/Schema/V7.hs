@@ -1,5 +1,10 @@
 module Data.Aeson.Schema.V7
-  (
+  ( Schema
+
+  , parseSchema
+  , ParserMonad
+
+  , validate
   )
   where
 

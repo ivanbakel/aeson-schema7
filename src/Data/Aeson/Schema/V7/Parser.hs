@@ -1,19 +1,28 @@
 {-# LANGUAGE QuasiQuotes #-}
 module Data.Aeson.Schema.V7.Parser
-  ( asSchema
+  ( parseSchema
+  , ParserMonad
   ) where
 
 import Data.Aeson.Schema.V7.Schema
 
-import Prelude hiding (const, id, minimum, maximum, not)
+import Prelude hiding (const, id, minimum, maximum, not, unlines)
 
+import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.BetterErrors as Aeson.BE
 import           Data.Aeson.BetterErrors ((<|>))
 import           Data.Aeson.QQ (aesonQQ)
 import           Data.Functor ((<&>))
 import           Data.HashMap.Strict (fromList)
 import           Data.List (nub)
-import           Data.Text (Text, pack)
+import           Data.Maybe (fromMaybe)
+import           Data.Text (Text, pack, unlines)
+
+parseSchema :: (ParserMonad m) => Aeson.Value -> m (Either ErrorMessage Schema)
+parseSchema value
+  = Aeson.BE.parseValueM asSchema value <&> \case
+      Right schema -> Right schema
+      Left parseError -> Left (unlines (Aeson.BE.displayError (\message -> message) parseError))
 
 type ErrorMessage = Text
 
