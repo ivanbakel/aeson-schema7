@@ -42,7 +42,7 @@ data OneOrMany a
   | Many [a]
 
 asType :: (ParserMonad m) => Parser m (OneOrMany SchemaType)
-asType = 
+asType =
   (One <$> asSchemaType)
   <|>
   ((Aeson.BE.eachInArray asSchemaType) >>= \case
@@ -152,7 +152,7 @@ asNumberSchema = do
       warn $
         "The boolean form of `exclusiveMinimum` makes no sense without a value for\
         \ `minimum`, and will be ignored"
-  
+
   case (maximum, exclusiveMaximum) of
     (Just _, Nothing) -> pure ()
     (Nothing, Just (ExcludeBoundary _)) -> pure ()
@@ -246,7 +246,7 @@ asArraySchema = do
         Just _  ->
           (warn "`additionalItems` is ignored when doing list validation")
 
-    Just (TupleSchema _) -> 
+    Just (TupleSchema _) ->
       -- TODO: warn about interaction with bound flags
       pure ()
 
@@ -283,31 +283,31 @@ asSchema =
     asSchemaObject = do
       schema <- useKey "$schema" asTextContent
       id <- useKey "$id" asURI
-    
+
       title <- useKey "title" asTextContent
       description <- useKey "description" asTextContent
       -- TODO: warn if these don't match the schema
       defaultValue <- useKey "defaultValue" asJSONContent
       examples <- useKey "examples" (Aeson.BE.eachInArray asJSONContent)
-    
+
       typedSchema <- asTypedSchema
-    
+
       -- TODO: warn if these don't match the type schema
       valueSchema <- asValueSchema
-    
+
       anyOf <- useKey "anyOf" (Aeson.BE.eachInArray asSchema)
       allOf <- useKey "allOf" (Aeson.BE.eachInArray asSchema)
       oneOf <- useKey "oneOf" (Aeson.BE.eachInArray asSchema)
       not   <- useKey "not" asSchema
-    
+
       ifThenElse <- asIfThenElseSchema
-    
+
       ref <- useKey "$ref" asURI
-    
+
       -- TODO: warn about presence of other keys in the presence of $ref
-    
+
       additionalContent <- asAdditionalContent
-    
+
       pure Schema{..}
 
 asTextContent :: (ParserMonad m) => Parser m TextContent
@@ -364,16 +364,21 @@ asIfThenElseSchema = do
   maybeThenS <- useKey "then" asSchema
   maybeElseS <- useKey "else" asSchema
 
-  case (maybeIfS, maybeThenS, maybeElseS) of
-    (Just ifS, Just thenS, Nothing) -> pure (Just (IfThenElseSchema ifS thenS Nothing))
-    (Just ifS, Just thenS, Just elseS) ->
-      pure (Just (IfThenElseSchema ifS thenS (Just elseS)))
+  case maybeIfS of
+    Nothing -> case (maybeThenS, maybeElseS) of
+      (Nothing, Nothing) ->
+        pure Nothing
 
-    (Nothing, Nothing, Nothing) ->
-      pure Nothing
+      (Just _, _) -> do
+        warn "usage of `then` without an `if` has no effect"
+        pure Nothing
 
-    _ ->
-      err "invalid combination of `if`, `then`, and `else` keys"
+      (_, Just _) -> do
+        warn "usage of `else` without an `if` has no effect"
+        pure Nothing
+
+    Just ifS ->
+      pure (Just (IfThenElseSchema ifS maybeThenS maybeElseS))
 
 -- TODO: This logic
 asAdditionalContent :: ParserMonad m => Parser m (Maybe AdditionalContent)

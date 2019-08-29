@@ -85,4 +85,4 @@ buildTestCase :: Schema.V7.Schema -> TestCase -> Tasty.TestTree
 
 buildTestCase schema TestCase{..}
   = Tasty.HUnit.testCase description
-      (Schema.V7.validate schema testData Tasty.HUnit.@=? valid)
+      (valid Tasty.HUnit.@=? Schema.V7.validate schema testData)

@@ -49,8 +49,8 @@ validate Schema{..} value = and $
 
   , checkMaybe ifThenElse \IfThenElseSchema{..} ->
       if validate ifS value
-          then validate thenS value
-          else maybe True (flip validate $ value) elseS
+          then maybe True (flip validate value) thenS
+          else maybe True (flip validate value) elseS
 
   ]
 

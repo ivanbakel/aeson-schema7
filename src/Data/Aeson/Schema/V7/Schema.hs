@@ -209,7 +209,7 @@ type JSONContent = Aeson.Value
 data IfThenElseSchema
   = IfThenElseSchema
       { ifS :: Schema
-      , thenS :: Schema
+      , thenS :: Maybe Schema
       , elseS :: Maybe Schema
       }
 
