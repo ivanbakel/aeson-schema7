@@ -38,13 +38,24 @@ library
 test-suite aeson-schema7-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
-  main-is:             Spec.hs
+  main-is:             Test.hs
+  other-modules:       Data.Aeson.Schema.V7.TestSuite
   build-depends:       base
+                     , aeson
                      , aeson-schema7
-                     , hspec
-                     , QuickCheck
+                     , aeson-better-errors
+                     , bytestring
+                     , directory
+                     , tasty
+                     , tasty-hunit
+                     , text
+                     , filemanip
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
+  default-extensions:  LambdaCase
+                     , BlockArguments
+                     , RecordWildCards
+                     , OverloadedStrings
 
 source-repository head
   type:     git

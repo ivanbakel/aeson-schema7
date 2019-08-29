@@ -13,6 +13,7 @@ import qualified Data.Aeson.BetterErrors as Aeson.BE
 import           Data.Aeson.BetterErrors ((<|>))
 import           Data.Aeson.QQ (aesonQQ)
 import           Data.Functor ((<&>))
+import           Data.Functor.Identity (Identity)
 import           Data.HashMap.Strict (fromList)
 import           Data.List (nub)
 import           Data.Maybe (fromMaybe)
@@ -32,6 +33,9 @@ class (Monad m) => ParserMonad m where
   warn :: Text -> Parser m ()
   err  :: Text -> Parser m a
   err = Aeson.BE.throwCustomError
+
+instance ParserMonad Identity where
+  warn _ignoreWarning = pure ()
 
 data OneOrMany a
   = One a
