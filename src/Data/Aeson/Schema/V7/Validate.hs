@@ -25,7 +25,7 @@ validate Schema{..} value = and $
         One single -> single `acceptsValue` value
         Many types -> any (`acceptsValue` value) types
     
-  , let TypeSchemas{..} = typeSchemas
+  , let TypedSchemas{..} = typedSchemas
     in and $
       [ validateString stringSchema value
       , validateNumber numberSchema value
@@ -57,13 +57,6 @@ validate Schema{..} value = and $
   ]
 
   where
-    valueType = aesonTypeOf value
-
-    acceptsValueType IntegerType
-      = valueType == NumberType
-    acceptsValueType other
-      = valueType == other
-
     exactlyOne :: (a -> Bool) -> [a] -> Bool
     exactlyOne check list
       = fromMaybe False $
@@ -166,6 +159,6 @@ acceptsValue IntegerType (Aeson.Number val) = isInteger val
 acceptsValue NumberType (Aeson.Number _) = True
 acceptsValue ObjectType (Aeson.Object _) = True
 acceptsValue ArrayType (Aeson.Array _) = True
-acceptsValue BooleanType (Aeson.Boolean _) = True
+acceptsValue BooleanType (Aeson.Bool _) = True
 acceptsValue NullType Aeson.Null = True
 acceptsValue _ _ = False

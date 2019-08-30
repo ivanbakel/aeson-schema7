@@ -8,7 +8,6 @@ module Data.Aeson.Schema.V7.Schema where
 import Prelude hiding (minimum, maximum)
 
 import qualified Data.Aeson as Aeson
-import qualified Data.Generics.Traversable as Gen
 import           Data.Maybe (fromMaybe)
 import qualified Data.Range.Algebra as R.A
 import qualified Data.Range.Range as R
@@ -17,6 +16,8 @@ import           Data.Scientific (Scientific, scientific, toBoundedInteger)
 import           Data.HashMap.Strict (HashMap)
 
 import           GHC.Generics (Generic)
+import qualified Data.Generics.Traversable as Gen
+import           Data.Generics.Traversable.Generic ()
 
 data SchemaType
   = StringType
@@ -181,7 +182,7 @@ data Schema
       , examples :: Maybe [JSONContent]
 
       , types :: Maybe (OneOrMany SchemaType)
-      , typedSchemas :: Maybe TypedSchemas
+      , typedSchemas :: TypedSchemas
       , valueSchema :: Maybe ValueSchema
 
       , anyOf :: Maybe [Schema]

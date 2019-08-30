@@ -276,7 +276,7 @@ asSchema =
       defaultValue <- useKey "defaultValue" asJSONContent
       examples <- useKey "examples" (Aeson.BE.eachInArray asJSONContent)
 
-      (types, typedSchema) <- asTypedSchema
+      (types, typedSchemas) <- asTypedSchema
 
       -- TODO: warn if these don't match the type schema
       valueSchema <- asValueSchema
