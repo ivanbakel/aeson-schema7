@@ -23,7 +23,7 @@ validate Schema{..} value = and $
   [ checkMaybe types \specifiedTypes ->
       case specifiedTypes of
         One single -> single `acceptsValue` value
-        Many types -> any (`acceptsValue` value) types
+        Many multiple -> any (`acceptsValue` value) multiple
     
   , let TypedSchemas{..} = typedSchemas
     in and $
@@ -80,7 +80,7 @@ validate Schema{..} value = and $
 
       where
         stringLength = T.length string
-    validateString _ _ = False
+    validateString _ _ = True
 
     validateNumber numberSchema@NumberSchema{..} (Aeson.Number number) = and $
       [ checkMaybe multipleOf \_divisor -> False -- TODO
@@ -89,7 +89,7 @@ validate Schema{..} value = and $
 
       ]
 
-    validateNumber _ _ = False
+    validateNumber _ _ = True
 
     validateObject ObjectSchema{..} (Aeson.Object map) = and $
       [ checkMaybe properties \PropertiesSchema{..} ->
@@ -124,7 +124,7 @@ validate Schema{..} value = and $
 
       ]
 
-    validateObject _ _ = False
+    validateObject _ _ = True
 
     validateArray ArraySchema{..} (Aeson.Array arrayVec) = and $
       [ checkMaybe items \case
@@ -149,7 +149,7 @@ validate Schema{..} value = and $
       where
         array = V.toList arrayVec
 
-    validateArray _ _ = False
+    validateArray _ _ = True
 
     checkMaybe = flip (maybe True)
 
