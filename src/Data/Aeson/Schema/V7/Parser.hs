@@ -187,7 +187,7 @@ asObjectSchema = do
   patternProperties <- useKey "patternProperties" asPatternPropertiesSchema
 
   -- TODO: Check these against property names and pattern properties
-  requiredProperties <- useKey "requiredProperties" (Aeson.BE.eachInArray asPropertyKey)
+  required <- useKey "required" (Aeson.BE.eachInArray asPropertyKey)
 
   minProperties <- useKey "minProperties" asCount
   maxProperties <- useKey "maxProperties" asCount
@@ -196,7 +196,7 @@ asObjectSchema = do
     then warn "`minProperties` is greater than `maxProperties` - the schema is unsatisfiable!"
     else pure ()
 
-  if maxProperties < (length <$> requiredProperties)
+  if maxProperties < (length <$> required)
     then warn
           "There are more properties in `requiredProperties` than are allowed by\
           \ `maxProperties` - the schema is unsatisfiable!"

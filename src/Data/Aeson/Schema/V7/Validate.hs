@@ -107,8 +107,8 @@ validate Schema{..} value = and $
                       else validate additionalSchema additionalValue)
               (HM.toList map)
 
-      , checkMaybe requiredProperties \required ->
-          all (`elem` HM.keys map) required
+      , checkMaybe required \requiredProps ->
+          all (`elem` HM.keys map) requiredProps
 
       , checkMaybe propertyNames \nameSchema ->
           all (validateString nameSchema . Aeson.String) (HM.keys map)
@@ -128,12 +128,21 @@ validate Schema{..} value = and $
 
     validateArray ArraySchema{..} (Aeson.Array arrayVec) = and $
       [ checkMaybe items \case
-          ListSchema{..} ->
+          ListSchema listSchema ->
             all (validate listSchema) array
-          TupleSchema{} -> False -- TODO
+          TupleSchema tupleSchema ->
+            and (zipWith validate tupleSchema array)
 
       , checkMaybe contains \containsSchema ->
           any (validate containsSchema) array
+
+      , checkMaybe additionalItems \additional ->
+          case items of
+            Nothing -> True
+            Just ListSchema{} -> True
+            Just (TupleSchema tupleItems) ->
+              let beyondTuple = drop (L.length tupleItems) array
+              in all (validate additional) beyondTuple
 
       , checkMaybe minItems \min ->
           L.length array >= min

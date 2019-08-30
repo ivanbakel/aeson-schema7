@@ -126,7 +126,7 @@ data ObjectSchema
   = ObjectSchema
       { properties :: Maybe PropertiesSchema
       , additionalProperties :: Maybe Schema
-      , requiredProperties :: Maybe [PropertyKey]
+      , required :: Maybe [PropertyKey]
       , propertyNames :: Maybe StringSchema
       , patternProperties :: Maybe PatternPropertiesSchema
 
