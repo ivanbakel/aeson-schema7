@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- Unfornate @Enum@ instance below
 
@@ -6,12 +8,15 @@ module Data.Aeson.Schema.V7.Schema where
 import Prelude hiding (minimum, maximum)
 
 import qualified Data.Aeson as Aeson
+import qualified Data.Generics.Traversable as Gen
 import           Data.Maybe (fromMaybe)
 import qualified Data.Range.Algebra as R.A
 import qualified Data.Range.Range as R
 import           Data.Text (Text)
 import           Data.Scientific (Scientific, scientific, toBoundedInteger)
 import           Data.HashMap.Strict (HashMap)
+
+import           GHC.Generics (Generic)
 
 data SchemaType
   = StringType
@@ -23,6 +28,10 @@ data SchemaType
   | NullType
   deriving (Eq)
 
+moreGeneralThan :: SchemaType -> SchemaType -> Bool
+moreGeneralThan NumberType IntegerType = True
+moreGeneralThan type1 type2 = type1 == type2
+
 data StringSchema
   = StringSchema
       { minLength :: Maybe Count
@@ -33,6 +42,7 @@ data StringSchema
       , contentMediaType :: Maybe MediaType
       , contentEncoding :: Maybe Encoding
       }
+  deriving (Generic)
 
 -- TODO Replace
 type MediaType = Text
@@ -56,6 +66,7 @@ data NumberSchema
       , exclusiveMinimum :: Maybe ExclusiveSchema
       , exclusiveMaximum :: Maybe ExclusiveSchema
       }
+  deriving (Generic)
 
 type Number = Scientific
 
@@ -121,6 +132,7 @@ data ObjectSchema
       , minProperties :: Maybe Count
       , maxProperties :: Maybe Count
       }
+  deriving (Generic)
 
 type PropertyKey = Text
 
@@ -145,6 +157,7 @@ data ArraySchema
       , maxItems :: Maybe Count
       , uniqueItems :: Maybe Flag
       }
+  deriving (Generic)
 
 data ItemsSchema
   = ListSchema
@@ -167,7 +180,8 @@ data Schema
       , defaultValue :: Maybe JSONContent
       , examples :: Maybe [JSONContent]
 
-      , typedSchema :: Maybe TypedSchema
+      , types :: Maybe (OneOrMany SchemaType)
+      , typedSchemas :: Maybe TypedSchemas
       , valueSchema :: Maybe ValueSchema
 
       , anyOf :: Maybe [Schema]
@@ -185,15 +199,17 @@ data Schema
   -- | A schema of `true` (accept everything) or `false` (accept nothing)
   | SchemaFlag Flag
 
-data TypedSchema
-  = ManyTypes [SchemaType]
-  | StringTypedSchema StringSchema
-  | IntegerTypedSchema NumberSchema
-  | NumberTypedSchema NumberSchema
-  | ObjectTypedSchema ObjectSchema
-  | ArrayTypedSchema ArraySchema
-  | BooleanTypedSchema
-  | NullTypedSchema
+data OneOrMany a
+  = One a
+  | Many [a]
+
+data TypedSchemas
+  = TypedSchemas
+      { stringSchema :: StringSchema
+      , numberSchema :: NumberSchema
+      , objectSchema :: ObjectSchema
+      , arraySchema :: ArraySchema
+      } 
 
 data ValueSchema
   = ConstSchema
@@ -219,3 +235,18 @@ newtype AdditionalContent
   = AdditionalContent
       { additionalKeys :: Map PropertyKey Schema
       }
+
+class SettableKey a where
+  isKeySet :: a -> Bool
+
+instance SettableKey (Maybe a) where
+  isKeySet Nothing = False
+  isKeySet (Just _) = True
+
+hasKeySet 
+  :: Gen.GTraversable SettableKey a
+  => a
+  -> Bool
+
+hasKeySet
+  = Gen.gfoldr @SettableKey (\val acc -> acc || (isKeySet val)) False

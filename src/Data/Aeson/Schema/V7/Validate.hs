@@ -20,16 +20,18 @@ validate :: Schema -> Aeson.Value -> Bool
 validate (SchemaFlag True) _ = True
 validate (SchemaFlag False) _ = False
 validate Schema{..} value = and $
-  [ checkMaybe typedSchema \case
-    ManyTypes types -> valueType `elem` types
-    StringTypedSchema stringSchema -> validateString stringSchema value
-    IntegerTypedSchema integerSchema -> validateInteger integerSchema value
-    NumberTypedSchema numberSchema -> validateNumber numberSchema value
-    ObjectTypedSchema objectSchema -> validateObject objectSchema value
-    ArrayTypedSchema arraySchema -> validateArray arraySchema value
-    BooleanTypedSchema ->  valueType == BooleanType
-    NullTypedSchema -> valueType == NullType
-
+  [ checkMaybe types \specifiedTypes ->
+      case specifiedTypes of
+        One single -> single `acceptsValue` value
+        Many types -> any (`acceptsValue` value) types
+    
+  , let TypeSchemas{..} = typeSchemas
+    in and $
+      [ validateString stringSchema value
+      , validateNumber numberSchema value
+      , validateObject objectSchema value
+      , validateArray arraySchema value
+      ]
 
   , checkMaybe valueSchema \case
     ConstSchema constValue -> constValue == value
@@ -57,6 +59,11 @@ validate Schema{..} value = and $
   where
     valueType = aesonTypeOf value
 
+    acceptsValueType IntegerType
+      = valueType == NumberType
+    acceptsValueType other
+      = valueType == other
+
     exactlyOne :: (a -> Bool) -> [a] -> Bool
     exactlyOne check list
       = fromMaybe False $
@@ -81,10 +88,6 @@ validate Schema{..} value = and $
       where
         stringLength = T.length string
     validateString _ _ = False
-
-    validateInteger integerSchema (Aeson.Number number)
-      = isInteger number && validateNumber integerSchema (Aeson.Number number)
-    validateInteger _ _ = False
 
     validateNumber numberSchema@NumberSchema{..} (Aeson.Number number) = and $
       [ checkMaybe multipleOf \_divisor -> False -- TODO
@@ -157,10 +160,12 @@ validate Schema{..} value = and $
 
     checkMaybe = flip (maybe True)
 
-    aesonTypeOf :: Aeson.Value -> SchemaType
-    aesonTypeOf (Aeson.Object _) = ObjectType
-    aesonTypeOf (Aeson.Array _)  = ArrayType
-    aesonTypeOf (Aeson.String _) = StringType
-    aesonTypeOf (Aeson.Number _) = NumberType
-    aesonTypeOf (Aeson.Bool _)   = BooleanType
-    aesonTypeOf Aeson.Null       = NullType
+acceptsValue :: SchemaType -> Aeson.Value -> Bool
+acceptsValue StringType (Aeson.String _) = True
+acceptsValue IntegerType (Aeson.Number val) = isInteger val
+acceptsValue NumberType (Aeson.Number _) = True
+acceptsValue ObjectType (Aeson.Object _) = True
+acceptsValue ArrayType (Aeson.Array _) = True
+acceptsValue BooleanType (Aeson.Boolean _) = True
+acceptsValue NullType Aeson.Null = True
+acceptsValue _ _ = False

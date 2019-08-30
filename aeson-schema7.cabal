@@ -26,6 +26,7 @@ library
                      , range
                      , scientific
                      , text
+                     , traverse-with-class
                      , unordered-containers
                      , vector
   ghc-options:         -Wall
@@ -34,6 +35,8 @@ library
                      , BlockArguments
                      , RecordWildCards
                      , OverloadedStrings
+                     , DeriveGeneric
+                     , TypeApplications
 
 test-suite aeson-schema7-test
   type:                exitcode-stdio-1.0

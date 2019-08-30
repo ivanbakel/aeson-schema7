@@ -6,7 +6,8 @@ module Data.Aeson.Schema.V7.Parser
 
 import Data.Aeson.Schema.V7.Schema
 
-import Prelude hiding (const, id, minimum, maximum, not, unlines)
+import           Prelude hiding (const, id, minimum, maximum, not, unlines)
+import qualified Prelude as P (not)
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.BetterErrors as Aeson.BE
@@ -37,32 +38,17 @@ class (Monad m) => ParserMonad m where
 instance ParserMonad Identity where
   warn _ignoreWarning = pure ()
 
-data OneOrMany a
-  = One a
-  | Many [a]
+eachInOneOrMany :: Monad m => Aeson.BE.ParseT err m a -> Aeson.BE.ParseT err m (OneOrMany a)
+eachInOneOrMany innerParser
+  = (One <$> innerParser)
+    <|>
+    (Many <$> Aeson.BE.eachInArray innerParser)
 
-asType :: (ParserMonad m) => Parser m (OneOrMany SchemaType)
-asType =
-  (One <$> asSchemaType)
-  <|>
-  ((Aeson.BE.eachInArray asSchemaType) >>= \case
-    []    -> err "the `type` array cannot be empty"
-    types -> do
-      if types /= nub types
-        then warn "the `type` array contains duplicate values"
-        else pure ()
+asType :: (ParserMonad m) => Parser m SchemaType
+asType
+  = Aeson.BE.asText >>= toSchemaType
 
-      if IntegerType `elem` types && NumberType `elem` types
-        then warn
-              "the `type` array contains both `number` and `integer` as types\
-              \ but `integer` supercedes `number`"
-        else pure ()
-
-      pure (Many types))
   where
-    asSchemaType
-      = Aeson.BE.asText >>= toSchemaType
-
     toSchemaType = \case
       "string" -> pure StringType
       "integer" -> pure IntegerType
@@ -290,7 +276,7 @@ asSchema =
       defaultValue <- useKey "defaultValue" asJSONContent
       examples <- useKey "examples" (Aeson.BE.eachInArray asJSONContent)
 
-      typedSchema <- asTypedSchema
+      (types, typedSchema) <- asTypedSchema
 
       -- TODO: warn if these don't match the type schema
       valueSchema <- asValueSchema
@@ -319,19 +305,66 @@ asJSONContent = Aeson.BE.asValue
 asURI :: (ParserMonad m) => Parser m URI
 asURI = Aeson.BE.asText
 
-asTypedSchema :: (ParserMonad m) => Parser m (Maybe TypedSchema)
+asTypedSchema :: (ParserMonad m) => Parser m (Maybe (OneOrMany SchemaType), TypedSchemas)
 asTypedSchema = do
-  types <- useKey "type" asType
+  typeVal <- useKey "type" (eachInOneOrMany asType)
 
-  sequence $ types <&> \case
-    One StringType -> StringTypedSchema <$> asStringSchema
-    One IntegerType -> IntegerTypedSchema <$> asNumberSchema
-    One NumberType -> NumberTypedSchema <$> asNumberSchema
-    One ObjectType -> ObjectTypedSchema <$> asObjectSchema
-    One ArrayType -> ArrayTypedSchema <$> asArraySchema
-    One BooleanType -> pure BooleanTypedSchema
-    One NullType -> pure NullTypedSchema
-    Many typeList -> pure (ManyTypes typeList)
+  case typeVal of
+    Nothing -> pure ()
+    Just (One _) -> pure ()
+
+    Just (Many types) -> do
+      if null types
+        then err "the `type` array cannot be empty"
+        else pure ()
+
+      if types /= nub types
+        then warn "the `type` array contains duplicate values"
+        else pure ()
+
+      if (IntegerType `elem` types && NumberType `elem` types)
+        then warn
+              "the `type` array contains both `number` and `integer` as types\
+              \ but `number` is more general than `integer`"
+        else pure ()
+
+      pure ()
+
+  stringSchema <- asStringSchema
+  if P.not (typeVal `accepts` StringType) && hasKeySet stringSchema
+    then warn
+          "one or more keys for the type `string` are set, but the schema\
+          \ doesn't accept values of type `string`"
+    else pure ()
+
+  numberSchema <- asNumberSchema
+  if P.not (typeVal `accepts` NumberType || typeVal `accepts` IntegerType) && hasKeySet numberSchema
+    then warn
+          "one or more keys for the type `number` are set, but the schema\
+          \ doesn't accept values of type `number`"
+    else pure ()
+
+  objectSchema <- asObjectSchema
+  if P.not (typeVal `accepts` ObjectType) && hasKeySet objectSchema
+    then warn
+          "one or more keys for the type `object` are set, but the schema\
+          \ doesn't accept values of type `object`"
+    else pure ()
+
+  arraySchema <- asArraySchema
+  if P.not (typeVal `accepts` ArrayType) && hasKeySet arraySchema
+    then warn
+          "one or more keys for the type `array` are set, but the schema\
+          \ doesn't accept values of type `array`"
+    else pure ()
+
+  pure (typeVal, TypedSchemas{..})
+
+  where
+    accepts :: Maybe (OneOrMany SchemaType) -> SchemaType -> Bool
+    accepts Nothing _ = True
+    accepts (Just (One single)) sType = moreGeneralThan single sType
+    accepts (Just (Many types)) sType = any (`moreGeneralThan` sType) types
 
 asValueSchema :: (ParserMonad m) => Parser m (Maybe ValueSchema)
 asValueSchema = do
