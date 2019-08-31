@@ -19,6 +19,8 @@ import           Data.HashMap.Strict (fromList)
 import           Data.List (nub)
 import           Data.Maybe (fromMaybe)
 import           Data.Text (Text, pack, unlines)
+import           Data.Text.Encoding (encodeUtf8)
+import qualified Text.Regex.PCRE.Heavy as Regex
 
 parseSchema :: (ParserMonad m) => Aeson.Value -> m (Either ErrorMessage Schema)
 parseSchema value
@@ -86,7 +88,15 @@ asCount
         else err "this value cannot be negative"
 
 asPattern :: (ParserMonad m) => Parser m Pattern
-asPattern = Aeson.BE.asText
+asPattern = Aeson.BE.withText parsePattern
+
+parsePattern :: Text -> Either ErrorMessage Pattern
+parsePattern patternText
+  = case Regex.compileM (encodeUtf8 patternText) [] of
+      Left compileError ->
+        Left ("invalid pattern, compilation failed with error: " <> pack compileError)
+      Right regex ->
+        Right regex
 
 asFormat :: (ParserMonad m) => Parser m Format
 asFormat = Aeson.BE.asText
@@ -183,7 +193,7 @@ asObjectSchema :: (ParserMonad m) => Parser m ObjectSchema
 asObjectSchema = do
   properties <- useKey "properties" asPropertiesSchema
   additionalProperties <- useKey "additionalProperties" asSchema
-  propertyNames <- useKey "propertyNames" asStringSchema
+  propertyNames <- useKey "propertyNames" asSchema
   patternProperties <- useKey "patternProperties" asPatternPropertiesSchema
 
   -- TODO: Check these against property names and pattern properties
@@ -212,9 +222,9 @@ asPropertiesSchema = do
 
 asPatternPropertiesSchema :: ParserMonad m => Parser m PatternPropertiesSchema
 asPatternPropertiesSchema = do
-  patternSchemaPairs <- Aeson.BE.eachInObject asSchema
+  patternSchemaPairs <- Aeson.BE.eachInObjectWithKey parsePattern asSchema
 
-  pure (PatternPropertiesSchema (fromList patternSchemaPairs))
+  pure (PatternPropertiesSchema patternSchemaPairs)
 
 asPropertyKey :: (ParserMonad m) => Parser m PropertyKey
 asPropertyKey = Aeson.BE.asText

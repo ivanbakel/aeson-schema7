@@ -19,6 +19,8 @@ import           GHC.Generics (Generic)
 import qualified Data.Generics.Traversable as Gen
 import           Data.Generics.Traversable.Generic ()
 
+import qualified Text.Regex.PCRE.Heavy as Regex
+
 data SchemaType
   = StringType
   | IntegerType
@@ -56,7 +58,7 @@ data Encoding
 
 type Count = Int
 
-type Pattern = Text
+type Pattern = Regex.Regex
 type Format = Text
 
 data NumberSchema
@@ -127,7 +129,7 @@ data ObjectSchema
       { properties :: Maybe PropertiesSchema
       , additionalProperties :: Maybe Schema
       , required :: Maybe [PropertyKey]
-      , propertyNames :: Maybe StringSchema
+      , propertyNames :: Maybe Schema
       , patternProperties :: Maybe PatternPropertiesSchema
 
       , minProperties :: Maybe Count
@@ -146,7 +148,7 @@ newtype PropertiesSchema
 
 newtype PatternPropertiesSchema
   = PatternPropertiesSchema
-      { patternPropertiesSchema :: Map Pattern Schema
+      { patternPropertiesSchema :: [(Pattern, Schema)]
       }
 
 data ArraySchema

@@ -15,6 +15,7 @@ import qualified Data.Range.Range as R
 import           Data.Scientific (isInteger)
 import qualified Data.Text as T (length)
 import qualified Data.Vector as V (toList)
+import qualified Text.Regex.PCRE.Heavy as Regex
 
 validate :: Schema -> Aeson.Value -> Bool
 validate (SchemaFlag True) _ = True
@@ -74,7 +75,7 @@ validate Schema{..} value = and $
       [ checkMaybe minLength \min -> min <= stringLength
       , checkMaybe maxLength \max -> max >= stringLength
 
-      , True -- TODO : pattern checks
+      , checkMaybe pattern \regex -> string Regex.=~ regex
       , True -- TODO : format checks
       , True -- TODO : media type checks?
       , True -- TODO : encoding checks?
@@ -113,10 +114,22 @@ validate Schema{..} value = and $
           all (`elem` HM.keys map) requiredProps
 
       , checkMaybe propertyNames \nameSchema ->
-          all (validateString nameSchema . Aeson.String) (HM.keys map)
+          all (validate nameSchema . Aeson.String) (HM.keys map)
 
-      , checkMaybe patternProperties \PatternPropertiesSchema{} ->
-          True -- TODO: pattern checks
+      , checkMaybe patternProperties \PatternPropertiesSchema{..} ->
+          all
+            -- TODO: if matched here, keys should not be subject to
+            -- `additionalProperties` checks
+            (\(key, keyValue) ->
+                all
+                  (\(pattern, patternSchema) ->
+                      if key Regex.=~ pattern
+                        then validate patternSchema keyValue
+                        else True
+                  )
+                  patternPropertiesSchema
+            )
+            (HM.toList map)
 
       , checkMaybe minProperties \min ->
           HM.size map >= min
