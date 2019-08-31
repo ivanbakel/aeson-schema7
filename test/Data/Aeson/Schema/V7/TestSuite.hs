@@ -47,7 +47,7 @@ buildTestFromPath path = do
 
   case Aeson.BE.parse asTests fileContents of
     Left err -> do
-      traverse T.IO.putStrLn (Aeson.BE.displayError id err)
+      traverse (T.IO.hPutStrLn IO.stderr) (Aeson.BE.displayError id err)
 
       pure (badParseTestCase path)
     Right tests -> do
