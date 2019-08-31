@@ -33,9 +33,11 @@ validate Schema{..} value = and $
       , validateArray arraySchema value
       ]
 
-  , checkMaybe valueSchema \case
-    ConstSchema constValue -> constValue == value
-    EnumSchema enumValues -> value `elem` enumValues
+  , let ValueSchemas{..} = valueSchemas
+    in and $
+      [ checkMaybe constSchema \constValue -> constValue == value
+      , checkMaybe enumSchema \enumValues -> value `elem` enumValues
+      ]
 
   , checkMaybe anyOf \schemas ->
       any (flip validate $ value) schemas

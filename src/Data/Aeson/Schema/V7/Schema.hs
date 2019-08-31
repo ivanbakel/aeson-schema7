@@ -183,7 +183,7 @@ data Schema
 
       , types :: Maybe (OneOrMany SchemaType)
       , typedSchemas :: TypedSchemas
-      , valueSchema :: Maybe ValueSchema
+      , valueSchemas :: ValueSchemas
 
       , anyOf :: Maybe [Schema]
       , allOf :: Maybe [Schema]
@@ -212,12 +212,10 @@ data TypedSchemas
       , arraySchema :: ArraySchema
       } 
 
-data ValueSchema
-  = ConstSchema
-      { constSchema :: JSONContent
-      }
-  | EnumSchema
-      { enumSchema :: [JSONContent]
+data ValueSchemas
+  = ValueSchemas
+      { constSchema :: Maybe JSONContent
+      , enumSchema :: Maybe [JSONContent]
       }
 
 type TextContent = Text

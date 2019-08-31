@@ -279,7 +279,7 @@ asSchema =
       (types, typedSchemas) <- asTypedSchema
 
       -- TODO: warn if these don't match the type schema
-      valueSchema <- asValueSchema
+      valueSchemas <- asValueSchemas
 
       anyOf <- useKey "anyOf" (Aeson.BE.eachInArray asSchema)
       allOf <- useKey "allOf" (Aeson.BE.eachInArray asSchema)
@@ -366,30 +366,26 @@ asTypedSchema = do
     accepts (Just (One single)) sType = moreGeneralThan single sType
     accepts (Just (Many types)) sType = any (`moreGeneralThan` sType) types
 
-asValueSchema :: (ParserMonad m) => Parser m (Maybe ValueSchema)
-asValueSchema = do
-  const <- useKey "const" asJSONContent
-  enum  <- useKey "enum" (Aeson.BE.eachInArray asJSONContent)
+asValueSchemas :: (ParserMonad m) => Parser m ValueSchemas
+asValueSchemas = do
+  constSchema <- useKey "const" asJSONContent
+  enumSchema  <- useKey "enum" (Aeson.BE.eachInArray asJSONContent)
 
-  case (const, enum) of
+  case (constSchema, enumSchema) of
     (Just constVal, Just enumVals) ->
       if (constVal `elem` enumVals)
         then do
           warn
             "the value of `enum` here is redundant - the only possible value\
             \ is the one specified by `const`"
-
-          pure (Just (ConstSchema constVal))
         else
-          err
+          warn
             "`const` and `enum` have conflicting values - this schema cannot\
             \ accept any values!"
-    (Just constVal, Nothing) ->
-      pure (Just (ConstSchema constVal))
-    (Nothing, Just enumVals) ->
-      pure (Just (EnumSchema enumVals))
-    (Nothing, Nothing) ->
-      pure Nothing
+
+    (_, _) -> pure ()
+
+  pure ValueSchemas{..}
 
 asIfThenElseSchema :: ParserMonad m => Parser m (Maybe IfThenElseSchema)
 asIfThenElseSchema = do
