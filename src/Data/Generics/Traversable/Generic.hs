@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE TypeOperators, Rank2Types, KindSignatures, ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Data.Generics.Traversable.Generic where
 
 import Data.Proxy (Proxy (..))
