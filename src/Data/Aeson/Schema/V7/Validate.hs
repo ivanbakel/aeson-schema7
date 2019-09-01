@@ -102,7 +102,7 @@ validate Schema{..} value = and $
 
     validateNumber _ _ = True
 
-    validateObject ObjectSchema{..} (Aeson.Object map) = and $
+    validateObject ObjectSchema{..} aesonValue@(Aeson.Object map) = and $
       [ checkMaybe properties \PropertiesSchema{..} ->
         all (\(key, propertyValue) ->
                 maybe
@@ -138,6 +138,19 @@ validate Schema{..} value = and $
                   patternPropertiesSchema
             )
             (HM.toList map)
+
+      , checkMaybe dependencies \DependenciesSchema{..} ->
+          all
+            (maybe True (\case
+              PropertyDependency{..} ->
+                all
+                  (`HM.member` map)
+                  propertyDependencies
+              SchemaDependency{..} ->
+                validate schemaDependency aesonValue
+              )
+            . (`HM.lookup` dependenciesSchema))
+            (HM.keys map)
 
       , checkMaybe minProperties \min ->
           HM.size map >= min

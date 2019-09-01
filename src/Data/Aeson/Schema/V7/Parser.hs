@@ -196,6 +196,8 @@ asObjectSchema = do
   propertyNames <- useKey "propertyNames" asSchema
   patternProperties <- useKey "patternProperties" asPatternPropertiesSchema
 
+  dependencies <- useKey "dependencies" asDependencies
+
   -- TODO: Check these against property names and pattern properties
   required <- useKey "required" (Aeson.BE.eachInArray asPropertyKey)
 
@@ -228,6 +230,18 @@ asPatternPropertiesSchema = do
 
 asPropertyKey :: (ParserMonad m) => Parser m PropertyKey
 asPropertyKey = Aeson.BE.asText
+
+asDependencies :: (ParserMonad m) => Parser m DependenciesSchema
+asDependencies = do
+  keyDependencyPairs <- Aeson.BE.eachInObject asDependency
+
+  pure (DependenciesSchema (fromList keyDependencyPairs))
+
+asDependency :: (ParserMonad m) => Parser m Dependency
+asDependency
+  = (PropertyDependency <$> Aeson.BE.eachInArray asPropertyKey)
+    <|>
+    (SchemaDependency <$> asSchema)
 
 asArraySchema :: (ParserMonad m) => Parser m ArraySchema
 asArraySchema = do

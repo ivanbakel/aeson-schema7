@@ -129,8 +129,11 @@ data ObjectSchema
       { properties :: Maybe PropertiesSchema
       , additionalProperties :: Maybe Schema
       , required :: Maybe [PropertyKey]
+
       , propertyNames :: Maybe Schema
       , patternProperties :: Maybe PatternPropertiesSchema
+
+      , dependencies :: Maybe DependenciesSchema
 
       , minProperties :: Maybe Count
       , maxProperties :: Maybe Count
@@ -149,6 +152,19 @@ newtype PropertiesSchema
 newtype PatternPropertiesSchema
   = PatternPropertiesSchema
       { patternPropertiesSchema :: [(Pattern, Schema)]
+      }
+
+newtype DependenciesSchema
+  = DependenciesSchema
+      { dependenciesSchema :: Map PropertyKey Dependency
+      }
+
+data Dependency
+  = PropertyDependency
+      { propertyDependencies :: [PropertyKey]
+      }
+  | SchemaDependency
+      { schemaDependency :: Schema
       }
 
 data ArraySchema
