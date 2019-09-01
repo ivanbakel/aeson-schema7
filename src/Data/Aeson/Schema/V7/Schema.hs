@@ -78,8 +78,8 @@ data ExclusiveSchema
   | ExcludeBoundary Number
 
 instance Enum Scientific where
-  succ x = x + (scientific 1 1)
-  pred x = x - (scientific 1 1)
+  succ x = x + (scientific 1 0)
+  pred x = x - (scientific 1 0)
 
   toEnum = (`scientific` 1) . toInteger
   fromEnum = fromMaybe (maxBound) . toBoundedInteger

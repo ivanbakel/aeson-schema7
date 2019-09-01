@@ -4,6 +4,7 @@ module Data.Aeson.Schema.V7.Validate
 
 import Data.Aeson.Schema.V7.Schema
 
+import qualified Prelude as P (min)
 import Prelude hiding (const, id, length, map, min, minimum, max, maximum, not)
 
 import qualified Data.Aeson as Aeson
@@ -12,7 +13,7 @@ import qualified Data.HashMap.Strict as HM (lookup, keys, member, size, toList)
 import qualified Data.List as L (length, nub)
 import           Data.Maybe (fromMaybe)
 import qualified Data.Range.Range as R
-import           Data.Scientific (isInteger)
+import           Data.Scientific (isInteger, coefficient, base10Exponent)
 import qualified Data.Text as T (length)
 import qualified Data.Vector as V (toList)
 import qualified Text.Regex.PCRE.Heavy as Regex
@@ -25,7 +26,7 @@ validate Schema{..} value = and $
       case specifiedTypes of
         One single -> single `acceptsValue` value
         Many multiple -> any (`acceptsValue` value) multiple
-    
+
   , let TypedSchemas{..} = typedSchemas
     in and $
       [ validateString stringSchema value
@@ -86,7 +87,14 @@ validate Schema{..} value = and $
     validateString _ _ = True
 
     validateNumber numberSchema@NumberSchema{..} (Aeson.Number number) = and $
-      [ checkMaybe multipleOf \_divisor -> False -- TODO
+      [ checkMaybe multipleOf \divisor ->
+          if divisor > number
+            then number == 0
+            else
+              let normalizedExp = P.min (base10Exponent number) (base10Exponent divisor)
+                  scaledNumber = coeffWithExponent number normalizedExp
+                  scaledDivisor = coeffWithExponent divisor normalizedExp
+              in gcd scaledNumber scaledDivisor == scaledDivisor
 
       , R.inRanges (buildRanges numberSchema) number
 
@@ -176,6 +184,10 @@ validate Schema{..} value = and $
     validateArray _ _ = True
 
     checkMaybe = flip (maybe True)
+
+    coeffWithExponent scientificValue newExp
+      = let scaleFactor = (base10Exponent scientificValue - newExp)
+        in coefficient scientificValue * (10 ^ scaleFactor)
 
 acceptsValue :: SchemaType -> Aeson.Value -> Bool
 acceptsValue StringType (Aeson.String _) = True
