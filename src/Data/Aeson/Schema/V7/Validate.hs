@@ -12,7 +12,7 @@ import qualified Data.Bool as B (not)
 import qualified Data.HashMap.Strict as HM (lookup, keys, member, size, toList)
 import qualified Data.List as L (length, nub)
 import           Data.Maybe (fromMaybe)
-import qualified Data.Range.Range as R
+import qualified Data.Ranges as R
 import           Data.Scientific (isInteger, coefficient, base10Exponent)
 import qualified Data.Text as T (length)
 import qualified Data.Vector as V (toList)
@@ -96,7 +96,7 @@ validate Schema{..} value = and $
                   scaledDivisor = coeffWithExponent divisor normalizedExp
               in gcd scaledNumber scaledDivisor == scaledDivisor
 
-      , R.inRanges (buildRanges numberSchema) number
+      , R.contains number (buildInterval numberSchema)
 
       ]
 

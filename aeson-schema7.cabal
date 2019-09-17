@@ -24,8 +24,8 @@ library
                      , aeson
                      , aeson-better-errors
                      , aeson-qq
+                     , ord-ranges
                      , pcre-heavy
-                     , range
                      , scientific
                      , text
                      , traverse-with-class

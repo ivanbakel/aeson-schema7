@@ -18,6 +18,7 @@ import           Data.Functor.Identity (Identity)
 import           Data.HashMap.Strict (fromList)
 import           Data.List (nub)
 import           Data.Maybe (fromMaybe)
+import qualified Data.Ranges as R
 import           Data.Text (Text, pack, unlines)
 import           Data.Text.Encoding (encodeUtf8)
 import qualified Text.Regex.PCRE.Heavy as Regex
@@ -174,9 +175,9 @@ asNumberSchema = do
 
   let numberSchema = NumberSchema{..}
 
-  case buildRanges numberSchema of
-    [] -> warn "This combination of bounds results in an empty range!"
-    _  -> pure ()
+  if R.isEmpty (buildInterval numberSchema)
+    then warn "This combination of bounds results in an empty range!"
+    else pure ()
 
   pure numberSchema
 
