@@ -35,7 +35,7 @@ asTests = Aeson.BE.eachInArray asTest
 asTest :: Aeson.BE.Parse Text Test
 asTest = do
   description <- Aeson.BE.key "description" Aeson.BE.asString
-  schema <- Aeson.BE.key "schema" (Aeson.BE.withValueM Schema.V7.parseSchema)
+  schema <- Aeson.BE.key "schema" (Aeson.BE.withValueM Schema.V7.parseSchemaSuppressingWarnings)
   tests <- Aeson.BE.key "tests" (Aeson.BE.eachInArray asTestCase)
 
   pure Test{..}

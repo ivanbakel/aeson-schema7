@@ -1,6 +1,9 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Data.Aeson.Schema.V7.Parser
   ( parseSchema
+  , parseSchemaSuppressingWarnings
+
   , ParserMonad
   ) where
 
@@ -14,7 +17,6 @@ import qualified Data.Aeson.BetterErrors as Aeson.BE
 import           Data.Aeson.BetterErrors ((<|>))
 import           Data.Aeson.QQ (aesonQQ)
 import           Data.Functor ((<&>))
-import           Data.Functor.Identity (Identity)
 import           Data.HashMap.Strict (fromList)
 import           Data.List (nub)
 import           Data.Maybe (fromMaybe)
@@ -29,6 +31,11 @@ parseSchema value
       Right schema -> Right schema
       Left parseError -> Left (unlines (Aeson.BE.displayError (\message -> message) parseError))
 
+parseSchemaSuppressingWarnings :: (Monad m) => Aeson.Value -> m (Either ErrorMessage Schema)
+parseSchemaSuppressingWarnings value
+  = let SuppressWarnings result = parseSchema value
+    in result
+
 type ErrorMessage = Text
 
 type Parser m a = Aeson.BE.ParseT ErrorMessage m a
@@ -38,8 +45,12 @@ class (Monad m) => ParserMonad m where
   err  :: Text -> Parser m a
   err = Aeson.BE.throwCustomError
 
-instance ParserMonad Identity where
-  warn _ignoreWarning = pure ()
+newtype SuppressWarnings m a
+  = SuppressWarnings (m a)
+  deriving (Functor, Applicative, Monad)
+
+instance (Monad m) => ParserMonad (SuppressWarnings m) where
+  warn _suppressedWarning = pure ()
 
 eachInOneOrMany :: Monad m => Aeson.BE.ParseT err m a -> Aeson.BE.ParseT err m (OneOrMany a)
 eachInOneOrMany innerParser

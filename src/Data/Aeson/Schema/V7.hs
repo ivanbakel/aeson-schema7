@@ -2,6 +2,7 @@ module Data.Aeson.Schema.V7
   ( Schema
 
   , parseSchema
+  , parseSchemaSuppressingWarnings
   , ParserMonad
 
   , validate
