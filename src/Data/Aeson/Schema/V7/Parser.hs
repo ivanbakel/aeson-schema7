@@ -186,11 +186,15 @@ asNumberSchema = do
 
   let numberSchema = NumberSchema{..}
 
-  if R.isEmpty (buildInterval numberSchema)
+  if rangeIsEmpty (buildInterval numberSchema)
     then warn "This combination of bounds results in an empty range!"
     else pure ()
 
   pure numberSchema
+
+  where
+    rangeIsEmpty :: R.Ranges Number -> Bool
+    rangeIsEmpty range = R.unRanges range == R.unRanges R.inf
 
 asNumber :: (ParserMonad m) => Parser m Number
 asNumber = Aeson.BE.asScientific

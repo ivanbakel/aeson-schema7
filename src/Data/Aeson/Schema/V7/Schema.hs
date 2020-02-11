@@ -75,7 +75,7 @@ data ExclusiveSchema
   = DoExclude Bool
   | ExcludeBoundary Number
 
-buildInterval :: NumberSchema -> R.Interval Number
+buildInterval :: NumberSchema -> R.Ranges Number
 buildInterval NumberSchema{..}
   = foldr1 R.intersection
       [ inclusiveMinimumRange
@@ -85,30 +85,30 @@ buildInterval NumberSchema{..}
       ]
   where
     inclusiveMinimumRange
-      = maybe R.Everything R.FromClosed minimum
+      = maybe R.inf R.lbi minimum
     exclusiveMinimumRange
       = case exclusiveMinimum of
           Just (ExcludeBoundary val) ->
-            R.FromOpen val
+            R.lbe val
           Just (DoExclude True) ->
-            maybe R.Everything R.FromOpen minimum
+            maybe R.inf R.lbe minimum
           Just (DoExclude False) ->
-            R.Everything
+            R.inf
           Nothing ->
-            R.Everything
+            R.inf
 
     inclusiveMaximumRange
-      = maybe R.Everything R.ToClosed maximum
+      = maybe R.inf R.ubi maximum
     exclusiveMaximumRange
       = case exclusiveMaximum of
           Just (ExcludeBoundary val) ->
-            R.ToOpen val
+            R.ube val
           Just (DoExclude True) ->
-            maybe R.Everything R.ToOpen maximum
+            maybe R.inf R.ube maximum
           Just (DoExclude False) ->
-            R.Everything
+            R.inf
           Nothing ->
-            R.Everything
+            R.inf
 
 data ObjectSchema
   = ObjectSchema

@@ -96,7 +96,7 @@ validate Schema{..} value = and $
                   scaledDivisor = coeffWithExponent divisor normalizedExp
               in gcd scaledNumber scaledDivisor == scaledDivisor
 
-      , R.contains number (buildInterval numberSchema)
+      , R.inRanges (buildInterval numberSchema) number
 
       ]
 
