@@ -19,7 +19,6 @@ library
   other-modules:       Data.Aeson.Schema.V7.Schema
                      , Data.Aeson.Schema.V7.Parser
                      , Data.Aeson.Schema.V7.Validate
-                     , Data.Generics.Traversable.Generic
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , aeson-better-errors
