@@ -17,8 +17,6 @@ import           GHC.Generics (Generic)
 import qualified Data.Generics.Traversable as Gen
 import           Data.Generics.Traversable.Generic ()
 
-import qualified Text.Regex.PCRE.Heavy as Regex
-
 data SchemaType
   = StringType
   | IntegerType
@@ -33,11 +31,11 @@ moreGeneralThan :: SchemaType -> SchemaType -> Bool
 moreGeneralThan NumberType IntegerType = True
 moreGeneralThan type1 type2 = type1 == type2
 
-data StringSchema
+data StringSchema pattern
   = StringSchema
       { minLength :: Maybe Count
       , maxLength :: Maybe Count
-      , pattern   :: Maybe Pattern
+      , pattern   :: Maybe pattern
       , format    :: Maybe Format
 
       , contentMediaType :: Maybe MediaType
@@ -56,7 +54,6 @@ data Encoding
 
 type Count = Int
 
-type Pattern = Regex.Regex
 type Format = Text
 
 data NumberSchema
@@ -110,16 +107,16 @@ buildInterval NumberSchema{..}
           Nothing ->
             R.inf
 
-data ObjectSchema
+data ObjectSchema pattern
   = ObjectSchema
-      { properties :: Maybe PropertiesSchema
-      , additionalProperties :: Maybe Schema
+      { properties :: Maybe (PropertiesSchema pattern)
+      , additionalProperties :: Maybe (Schema pattern)
       , required :: Maybe [PropertyKey]
 
-      , propertyNames :: Maybe Schema
-      , patternProperties :: Maybe PatternPropertiesSchema
+      , propertyNames :: Maybe (Schema pattern)
+      , patternProperties :: Maybe (PatternPropertiesSchema pattern)
 
-      , dependencies :: Maybe DependenciesSchema
+      , dependencies :: Maybe (DependenciesSchema pattern)
 
       , minProperties :: Maybe Count
       , maxProperties :: Maybe Count
@@ -130,53 +127,53 @@ type PropertyKey = Text
 
 type Map = HashMap
 
-newtype PropertiesSchema
+newtype PropertiesSchema pattern
   = PropertiesSchema
-      { propertiesSchema :: Map PropertyKey Schema
+      { propertiesSchema :: Map PropertyKey (Schema pattern)
       }
 
-newtype PatternPropertiesSchema
+newtype PatternPropertiesSchema pattern
   = PatternPropertiesSchema
-      { patternPropertiesSchema :: [(Pattern, Schema)]
+      { patternPropertiesSchema :: [(pattern, Schema pattern)]
       }
 
-newtype DependenciesSchema
+newtype DependenciesSchema pattern
   = DependenciesSchema
-      { dependenciesSchema :: Map PropertyKey Dependency
+      { dependenciesSchema :: Map PropertyKey (Dependency pattern)
       }
 
-data Dependency
+data Dependency pattern
   = PropertyDependency
       { propertyDependencies :: [PropertyKey]
       }
   | SchemaDependency
-      { schemaDependency :: Schema
+      { schemaDependency :: Schema pattern
       }
 
-data ArraySchema
+data ArraySchema pattern
   = ArraySchema
-      { items :: Maybe ItemsSchema
-      , contains :: Maybe Schema
-      , additionalItems :: Maybe Schema
+      { items :: Maybe (ItemsSchema pattern)
+      , contains :: Maybe (Schema pattern)
+      , additionalItems :: Maybe (Schema pattern)
       , minItems :: Maybe Count
       , maxItems :: Maybe Count
       , uniqueItems :: Maybe Flag
       }
   deriving (Generic)
 
-data ItemsSchema
+data ItemsSchema pattern
   = ListSchema
-      { listSchema :: Schema
+      { listSchema :: Schema pattern
       }
   | TupleSchema
-      { tupleSchema :: [Schema]
+      { tupleSchema :: [Schema pattern]
       }
 
 type Flag = Bool
 
 -- Boolean and null have no specific schema
 
-data Schema
+data Schema pattern
   = Schema
       { schema :: Maybe TextContent
       , id :: Maybe URI
@@ -186,20 +183,20 @@ data Schema
       , examples :: Maybe [JSONContent]
 
       , types :: Maybe (OneOrMany SchemaType)
-      , typedSchemas :: TypedSchemas
+      , typedSchemas :: TypedSchemas pattern
       , valueSchemas :: ValueSchemas
 
-      , anyOf :: Maybe [Schema]
-      , allOf :: Maybe [Schema]
-      , oneOf :: Maybe [Schema]
-      , not   :: Maybe Schema
+      , anyOf :: Maybe [Schema pattern]
+      , allOf :: Maybe [Schema pattern]
+      , oneOf :: Maybe [Schema pattern]
+      , not   :: Maybe (Schema pattern)
 
-      , ifThenElse :: Maybe IfThenElseSchema
+      , ifThenElse :: Maybe (IfThenElseSchema pattern)
 
       , ref :: Maybe URI
 
       -- Keys with no semantic meaning
-      , additionalContent :: Maybe AdditionalContent
+      , additionalContent :: Maybe (AdditionalContent pattern)
       }
   -- | A schema of `true` (accept everything) or `false` (accept nothing)
   | SchemaFlag Flag
@@ -208,12 +205,12 @@ data OneOrMany a
   = One a
   | Many [a]
 
-data TypedSchemas
+data TypedSchemas pattern
   = TypedSchemas
-      { stringSchema :: StringSchema
+      { stringSchema :: StringSchema pattern
       , numberSchema :: NumberSchema
-      , objectSchema :: ObjectSchema
-      , arraySchema :: ArraySchema
+      , objectSchema :: ObjectSchema pattern
+      , arraySchema :: ArraySchema pattern
       } 
 
 data ValueSchemas
@@ -225,18 +222,18 @@ data ValueSchemas
 type TextContent = Text
 type JSONContent = Aeson.Value
 
-data IfThenElseSchema
+data IfThenElseSchema pattern
   = IfThenElseSchema
-      { ifS :: Schema
-      , thenS :: Maybe Schema
-      , elseS :: Maybe Schema
+      { ifS :: Schema pattern
+      , thenS :: Maybe (Schema pattern)
+      , elseS :: Maybe (Schema pattern)
       }
 
 type URI = Text
 
-newtype AdditionalContent
+newtype AdditionalContent pattern
   = AdditionalContent
-      { additionalKeys :: Map PropertyKey Schema
+      { additionalKeys :: Map PropertyKey (Schema pattern)
       }
 
 class SettableKey a where

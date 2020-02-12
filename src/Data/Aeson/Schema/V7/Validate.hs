@@ -1,5 +1,10 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Data.Aeson.Schema.V7.Validate
   ( validate
+
+  , PatternChecker (..)
+  , checkPattern
   ) where
 
 import Data.Aeson.Schema.V7.Schema
@@ -7,84 +12,95 @@ import Data.Aeson.Schema.V7.Schema
 import qualified Prelude as P (min)
 import Prelude hiding (const, id, length, map, min, minimum, max, maximum, not)
 
+import           Control.Monad (zipWithM)
+import           Control.Monad.Extra (allM, anyM, andM, ifM)
 import qualified Data.Aeson as Aeson
 import qualified Data.Bool as B (not)
+import           Data.Foldable (foldrM)
 import qualified Data.HashMap.Strict as HM (lookup, keys, member, size, toList)
 import qualified Data.List as L (length, nub)
 import           Data.Maybe (fromMaybe)
 import qualified Data.Ranges as R
 import           Data.Scientific (isInteger, coefficient, base10Exponent)
-import qualified Data.Text as T (length)
+import qualified Data.Text as T (Text, length)
 import qualified Data.Vector as V (toList)
-import qualified Text.Regex.PCRE.Heavy as Regex
+import qualified Polysemy as Poly
 
-validate :: Schema -> Aeson.Value -> Bool
-validate (SchemaFlag True) _ = True
-validate (SchemaFlag False) _ = False
-validate Schema{..} value = and $
-  [ checkMaybe types \specifiedTypes ->
+data PatternChecker pattern m a where
+  CheckPattern :: pattern -> T.Text -> PatternChecker pattern m Bool
+
+Poly.makeSem ''PatternChecker
+
+type SchemaValidator pattern r = Poly.Member (PatternChecker pattern) r
+
+validate :: forall pattern r. SchemaValidator pattern r => Schema pattern -> Aeson.Value -> Poly.Sem r Bool
+validate (SchemaFlag True) _ = pure True
+validate (SchemaFlag False) _ = pure False
+validate Schema{..} value = andM
+  [ pure $ checkMaybe types \specifiedTypes ->
       case specifiedTypes of
         One single -> single `acceptsValue` value
         Many multiple -> any (`acceptsValue` value) multiple
 
   , let TypedSchemas{..} = typedSchemas
-    in and $
+    in andM
       [ validateString stringSchema value
-      , validateNumber numberSchema value
+      , pure (validateNumber numberSchema value)
       , validateObject objectSchema value
       , validateArray arraySchema value
       ]
 
   , let ValueSchemas{..} = valueSchemas
-    in and $
+    in pure $ and
       [ checkMaybe constSchema \constValue -> constValue == value
       , checkMaybe enumSchema \enumValues -> value `elem` enumValues
       ]
 
-  , checkMaybe anyOf \schemas ->
-      any (flip validate $ value) schemas
+  , checkMaybeM anyOf \schemas ->
+      anyM (flip validate $ value) schemas
 
-  , checkMaybe allOf \schemas ->
-      all (flip validate $ value) schemas
+  , checkMaybeM allOf \schemas ->
+      allM (flip validate $ value) schemas
 
-  , checkMaybe oneOf \schemas ->
-      exactlyOne (flip validate $ value) schemas
+  , checkMaybeM oneOf \schemas ->
+      exactlyOneM (flip validate $ value) schemas
 
-  , checkMaybe not \invertedSchema ->
-      B.not (validate invertedSchema value)
+  , checkMaybeM not \invertedSchema ->
+      B.not <$> (validate invertedSchema value)
 
-  , checkMaybe ifThenElse \IfThenElseSchema{..} ->
-      if validate ifS value
-          then maybe True (flip validate value) thenS
-          else maybe True (flip validate value) elseS
+  , checkMaybeM ifThenElse \IfThenElseSchema{..} -> do
+      ifResult <- validate ifS value
+      if ifResult
+          then checkMaybeM thenS \thenSchema -> validate thenSchema value
+          else checkMaybeM elseS \elseSchema -> validate elseSchema value
 
   ]
 
   where
-    exactlyOne :: (a -> Bool) -> [a] -> Bool
-    exactlyOne check list
-      = fromMaybe False $
-          foldr
+    exactlyOneM :: (a -> Poly.Sem r Bool) -> [a] -> Poly.Sem r Bool
+    exactlyOneM check list
+      = fromMaybe False <$>
+          foldrM
             (\element acc -> case acc of
-                Nothing -> if check element then Just True else Nothing
-                Just True -> if check element then Just False else Just True
-                Just False -> Just False)
+                Nothing -> ifM (check element) (pure $ Just True) (pure Nothing)
+                Just True -> ifM (check element) (pure $ Just False) (pure $ Just True)
+                Just False -> pure (Just False))
           Nothing
           list
 
-    validateString StringSchema{..} (Aeson.String string) = and $
-      [ checkMaybe minLength \min -> min <= stringLength
-      , checkMaybe maxLength \max -> max >= stringLength
+    validateString StringSchema{..} (Aeson.String string) = andM
+      [ checkMaybeM minLength \min -> pure (min <= stringLength)
+      , checkMaybeM maxLength \max -> pure (max >= stringLength)
 
-      , checkMaybe pattern \regex -> string Regex.=~ regex
-      , True -- TODO : format checks
-      , True -- TODO : media type checks?
-      , True -- TODO : encoding checks?
+      , checkMaybeM pattern \regex -> checkPattern @pattern regex string
+      , pure True -- TODO : format checks
+      , pure True -- TODO : media type checks?
+      , pure True -- TODO : encoding checks?
       ]
 
       where
         stringLength = T.length string
-    validateString _ _ = True
+    validateString _ _ = pure True
 
     validateNumber numberSchema@NumberSchema{..} (Aeson.Number number) = and $
       [ checkMaybe multipleOf \divisor ->
@@ -102,48 +118,51 @@ validate Schema{..} value = and $
 
     validateNumber _ _ = True
 
-    validateObject ObjectSchema{..} aesonValue@(Aeson.Object map) = and $
-      [ checkMaybe properties \PropertiesSchema{..} ->
-        all (\(key, propertyValue) ->
-                maybe
-                  True
-                  (flip validate propertyValue)
-                  (HM.lookup key propertiesSchema))
+    validateObject ObjectSchema{..} aesonValue@(Aeson.Object map) = andM
+      [ checkMaybeM properties \PropertiesSchema{..} ->
+          allM
+            (\(key, propertyValue) ->
+                  maybe
+                    (pure True)
+                    (flip validate propertyValue)
+                    (HM.lookup key propertiesSchema))
             (HM.toList map)
 
-      , checkMaybe additionalProperties \additionalSchema ->
-          all (\(key, additionalValue) ->
+      , checkMaybeM additionalProperties \additionalSchema ->
+          allM
+            (\(key, additionalValue) ->
                   if maybe False (HM.member key . propertiesSchema) properties
-                      then True
+                      then pure True
                       else validate additionalSchema additionalValue)
-              (HM.toList map)
+            (HM.toList map)
 
-      , checkMaybe required \requiredProps ->
-          all (`elem` HM.keys map) requiredProps
+      , checkMaybeM required \requiredProps ->
+          pure (all (`elem` HM.keys map) requiredProps)
 
-      , checkMaybe propertyNames \nameSchema ->
-          all (validate nameSchema . Aeson.String) (HM.keys map)
+      , checkMaybeM propertyNames \nameSchema ->
+          allM (validate nameSchema . Aeson.String) (HM.keys map)
 
-      , checkMaybe patternProperties \PatternPropertiesSchema{..} ->
-          all
+      , checkMaybeM patternProperties \PatternPropertiesSchema{..} ->
+          allM
             -- TODO: if matched here, keys should not be subject to
             -- `additionalProperties` checks
             (\(key, keyValue) ->
-                all
-                  (\(pattern, patternSchema) ->
-                      if key Regex.=~ pattern
+                allM
+                  (\(pattern, patternSchema) -> do
+                      checkResult <- checkPattern pattern key
+                      if checkResult
                         then validate patternSchema keyValue
-                        else True
+                        else pure True
                   )
                   patternPropertiesSchema
             )
             (HM.toList map)
 
-      , checkMaybe dependencies \DependenciesSchema{..} ->
-          all
-            (maybe True (\case
+      , checkMaybeM dependencies \DependenciesSchema{..} ->
+          allM
+            (maybe (pure True) (\case
               PropertyDependency{..} ->
-                all
+                pure $ all
                   (`HM.member` map)
                   propertyDependencies
               SchemaDependency{..} ->
@@ -152,51 +171,55 @@ validate Schema{..} value = and $
             . (`HM.lookup` dependenciesSchema))
             (HM.keys map)
 
-      , checkMaybe minProperties \min ->
-          HM.size map >= min
+      , checkMaybeM minProperties \min ->
+          pure (HM.size map >= min)
 
-      , checkMaybe maxProperties \max ->
-          HM.size map <= max
+      , checkMaybeM maxProperties \max ->
+          pure (HM.size map <= max)
 
       ]
 
-    validateObject _ _ = True
+    validateObject _ _ = pure True
 
-    validateArray ArraySchema{..} (Aeson.Array arrayVec) = and $
-      [ checkMaybe items \case
+    validateArray ArraySchema{..} (Aeson.Array arrayVec) = and <$> sequence
+      [ checkMaybeM items \case
           ListSchema listSchema ->
-            all (validate listSchema) array
+            allM (validate listSchema) array
           TupleSchema tupleSchema ->
-            and (zipWith validate tupleSchema array)
+            and <$> (zipWithM validate tupleSchema array)
 
-      , checkMaybe contains \containsSchema ->
-          any (validate containsSchema) array
+      , checkMaybeM contains \containsSchema ->
+          anyM (validate containsSchema) array
 
-      , checkMaybe additionalItems \additional ->
+      , checkMaybeM additionalItems \additional ->
           case items of
-            Nothing -> True
-            Just ListSchema{} -> True
+            Nothing -> pure True
+            Just ListSchema{} -> pure True
             Just (TupleSchema tupleItems) ->
               let beyondTuple = drop (L.length tupleItems) array
-              in all (validate additional) beyondTuple
+              in allM (validate additional) beyondTuple
 
-      , checkMaybe minItems \min ->
-          L.length array >= min
-      , checkMaybe maxItems \max ->
-          L.length array <= max
+      , checkMaybeM minItems \min ->
+          pure (L.length array >= min)
+      , checkMaybeM maxItems \max ->
+          pure (L.length array <= max)
 
-      , checkMaybe uniqueItems \case
-          False -> True
-          True -> (L.nub array) == array
+      , checkMaybeM uniqueItems \case
+          False -> pure True
+          True -> pure ((L.nub array) == array)
 
       ]
 
       where
         array = V.toList arrayVec
 
-    validateArray _ _ = True
+    validateArray _ _ = pure True
 
+    checkMaybe :: Maybe a -> (a -> Bool) -> Bool
     checkMaybe = flip (maybe True)
+
+    checkMaybeM :: Maybe a -> (a -> Poly.Sem r Bool) -> Poly.Sem r Bool
+    checkMaybeM = flip (maybe (pure True))
 
     coeffWithExponent scientificValue newExp
       = let scaleFactor = (base10Exponent scientificValue - newExp)

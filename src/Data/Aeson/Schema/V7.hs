@@ -1,11 +1,7 @@
 module Data.Aeson.Schema.V7
-  ( Schema
-
-  , parseSchema
-  , parseSchemaSuppressingWarnings
-  , ParserMonad
-
-  , validate
+  ( module Data.Aeson.Schema.V7.Schema
+  , module Data.Aeson.Schema.V7.Parser
+  , module Data.Aeson.Schema.V7.Validate
   )
   where
 
