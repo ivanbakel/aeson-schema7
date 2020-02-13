@@ -29,7 +29,7 @@ pcreParse = Poly.interpret \(Schema.V7.ParsePattern regexText) -> do
     Left error -> Schema.V7.err (pack error)
     Right regex -> pure regex
 
-pcreCheck :: Poly.InterpreterFor (Schema.V7.PatternChecker PCRE.Regex) r
+pcreCheck :: Poly.InterpreterFor (Schema.V7.CheckPattern PCRE.Regex) r
 pcreCheck = Poly.interpret \(Schema.V7.CheckPattern pattern target) -> pure (target PCRE.=~ pattern)
 
 buildTestsFromPath :: IO.FilePath -> IO Tasty.TestTree
@@ -114,4 +114,8 @@ buildTestCase schema TestCase{..}
       (valid Tasty.HUnit.@=? runSchema testData)
 
   where
-    runSchema = Poly.run . pcreCheck . Schema.V7.validate schema
+    runSchema
+      = Poly.run
+        . Schema.V7.ignoreEncoding
+        . pcreCheck
+        . Schema.V7.validate schema

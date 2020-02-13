@@ -3,8 +3,12 @@
 module Data.Aeson.Schema.V7.Validate
   ( validate
 
-  , PatternChecker (..)
+  , CheckPattern (..)
   , checkPattern
+
+  , CheckEncoding (..)
+  , checkEncoding
+  , ignoreEncoding
   ) where
 
 import Data.Aeson.Schema.V7.Schema
@@ -26,18 +30,27 @@ import qualified Data.Text as T (Text, length)
 import qualified Data.Vector as V (toList)
 import qualified Polysemy as Poly
 
-data PatternChecker pattern m a where
-  CheckPattern :: pattern -> T.Text -> PatternChecker pattern m Bool
+-- | Regex checker for a fixed pattern type
+data CheckPattern pattern m a where
+  CheckPattern :: pattern -> T.Text -> CheckPattern pattern m Bool
 
-Poly.makeSem ''PatternChecker
+Poly.makeSem ''CheckPattern
 
-type SchemaValidator pattern r = Poly.Member (PatternChecker pattern) r
+data CheckEncoding m a where
+  CheckEncoding :: Encoding -> T.Text -> CheckEncoding m Bool
+
+Poly.makeSem ''CheckEncoding
+
+ignoreEncoding :: Poly.InterpreterFor CheckEncoding r
+ignoreEncoding = Poly.interpret \(CheckEncoding _ _) -> pure True
+
+type SchemaValidator pattern r = Poly.Members [CheckPattern pattern, CheckEncoding] r
 
 validate :: forall pattern r. SchemaValidator pattern r => Schema pattern -> Aeson.Value -> Poly.Sem r Bool
 validate (SchemaFlag True) _ = pure True
 validate (SchemaFlag False) _ = pure False
 validate Schema{..} value = andM
-  [ pure $ checkMaybe types \specifiedTypes ->
+    [ pure $ checkMaybe types \specifiedTypes ->
       case specifiedTypes of
         One single -> single `acceptsValue` value
         Many multiple -> any (`acceptsValue` value) multiple
@@ -95,7 +108,7 @@ validate Schema{..} value = andM
       , checkMaybeM pattern \regex -> checkPattern @pattern regex string
       , pure True -- TODO : format checks
       , pure True -- TODO : media type checks?
-      , pure True -- TODO : encoding checks?
+      , checkMaybeM contentEncoding \encoding -> checkEncoding encoding string
       ]
 
       where
