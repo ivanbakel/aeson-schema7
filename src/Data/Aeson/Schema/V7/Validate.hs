@@ -128,24 +128,8 @@ validate Schema{..} value = andM
                     (HM.lookup key propertiesSchema))
             (HM.toList map)
 
-      , checkMaybeM additionalProperties \additionalSchema ->
-          allM
-            (\(key, additionalValue) ->
-                  if maybe False (HM.member key . propertiesSchema) properties
-                      then pure True
-                      else validate additionalSchema additionalValue)
-            (HM.toList map)
-
-      , checkMaybeM required \requiredProps ->
-          pure (all (`elem` HM.keys map) requiredProps)
-
-      , checkMaybeM propertyNames \nameSchema ->
-          allM (validate nameSchema . Aeson.String) (HM.keys map)
-
       , checkMaybeM patternProperties \PatternPropertiesSchema{..} ->
           allM
-            -- TODO: if matched here, keys should not be subject to
-            -- `additionalProperties` checks
             (\(key, keyValue) ->
                 allM
                   (\(pattern, patternSchema) -> do
@@ -157,6 +141,28 @@ validate Schema{..} value = andM
                   patternPropertiesSchema
             )
             (HM.toList map)
+
+      , checkMaybeM additionalProperties \additionalSchema ->
+          allM
+            (\(key, additionalValue) -> do
+                  -- TODO: Consider some kind of key registration for this? It
+                  -- would have to account for location in the object
+                  let matchesProperty = maybe False (HM.member key . propertiesSchema) properties
+                  matchesPatternProperty <- maybe (pure False)
+                    (\PatternPropertiesSchema{..} ->
+                      anyM (\(pattern, _) -> checkPattern pattern key) patternPropertiesSchema)
+                    patternProperties
+
+                  if matchesProperty || matchesPatternProperty
+                      then pure True
+                      else validate additionalSchema additionalValue)
+            (HM.toList map)
+
+      , checkMaybeM required \requiredProps ->
+          pure (all (`elem` HM.keys map) requiredProps)
+
+      , checkMaybeM propertyNames \nameSchema ->
+          allM (validate nameSchema . Aeson.String) (HM.keys map)
 
       , checkMaybeM dependencies \DependenciesSchema{..} ->
           allM
