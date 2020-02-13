@@ -54,7 +54,7 @@ data Encoding
 
 type Count = Int
 
-type Format = Text
+newtype Format = Format Text
 
 data NumberSchema
   = NumberSchema

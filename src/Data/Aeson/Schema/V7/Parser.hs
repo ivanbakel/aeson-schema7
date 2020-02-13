@@ -126,7 +126,7 @@ asPattern :: SchemaParser pattern r => ParseResult pattern r pattern
 asPattern = (lift . parsePattern) =<< Aeson.BE.asText
 
 asFormat :: SchemaParser pattern r => ParseResult pattern r Format
-asFormat = Aeson.BE.asText
+asFormat = Format <$> Aeson.BE.asText
 
 asMediaType :: SchemaParser pattern r => ParseResult pattern r MediaType
 asMediaType = Aeson.BE.asText
