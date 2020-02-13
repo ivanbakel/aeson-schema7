@@ -9,6 +9,10 @@ module Data.Aeson.Schema.V7.Validate
   , CheckEncoding (..)
   , checkEncoding
   , ignoreEncoding
+
+  , CheckFormat (..)
+  , checkFormat
+  , ignoreFormat
   ) where
 
 import Data.Aeson.Schema.V7.Schema
@@ -36,6 +40,7 @@ data CheckPattern pattern m a where
 
 Poly.makeSem ''CheckPattern
 
+-- | Content encoding checker for strings
 data CheckEncoding m a where
   CheckEncoding :: Encoding -> T.Text -> CheckEncoding m Bool
 
@@ -44,7 +49,16 @@ Poly.makeSem ''CheckEncoding
 ignoreEncoding :: Poly.InterpreterFor CheckEncoding r
 ignoreEncoding = Poly.interpret \(CheckEncoding _ _) -> pure True
 
-type SchemaValidator pattern r = Poly.Members [CheckPattern pattern, CheckEncoding] r
+-- | Format checker for strings
+data CheckFormat m a where
+  CheckFormat :: Format -> T.Text -> CheckFormat m Bool
+
+Poly.makeSem ''CheckFormat
+
+ignoreFormat :: Poly.InterpreterFor CheckFormat r
+ignoreFormat = Poly.interpret \(CheckFormat _ _) -> pure True
+
+type SchemaValidator pattern r = Poly.Members [CheckPattern pattern, CheckEncoding, CheckFormat] r
 
 validate :: forall pattern r. SchemaValidator pattern r => Schema pattern -> Aeson.Value -> Poly.Sem r Bool
 validate (SchemaFlag True) _ = pure True
@@ -106,7 +120,7 @@ validate Schema{..} value = andM
       , checkMaybeM maxLength \max -> pure (max >= stringLength)
 
       , checkMaybeM pattern \regex -> checkPattern @pattern regex string
-      , pure True -- TODO : format checks
+      , checkMaybeM format \formatString -> checkFormat formatString string
       , pure True -- TODO : media type checks?
       , checkMaybeM contentEncoding \encoding -> checkEncoding encoding string
       ]

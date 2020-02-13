@@ -116,6 +116,7 @@ buildTestCase schema TestCase{..}
   where
     runSchema
       = Poly.run
+        . Schema.V7.ignoreFormat
         . Schema.V7.ignoreEncoding
         . pcreCheck
         . Schema.V7.validate schema
