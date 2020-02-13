@@ -281,6 +281,13 @@ asArraySchema = do
   contains <- useKey "contains" asSchema
   additionalItems <- useKey "additionalItems" asSchema
 
+  minItems <- useKey "minItems" asCount
+  maxItems <- useKey "maxItems" asCount
+
+  if badBounds minItems maxItems
+    then lift $ warn "`minItems` is greater than `maxItems` - the schema is unsatisfiable!"
+    else pure ()
+
   case items of
     Just (ListSchema _) -> do
       case additionalItems of
@@ -288,18 +295,13 @@ asArraySchema = do
         Just _  ->
           lift $ warn "`additionalItems` is ignored when doing list validation"
 
-    Just (TupleSchema _) ->
-      -- TODO: warn about interaction with bound flags
-      pure ()
+    Just (TupleSchema tupleSchema) ->
+      -- TODO: If additionalItems is unsatisfiable, check min does not exceed length
+      if fromMaybe False ((length tupleSchema >) <$> maxItems)
+        then lift $ warn "`maxItems` is less than the length of the tuple - the schema is unsatisfiable!"
+        else pure ()
 
     Nothing -> pure ()
-
-  minItems <- useKey "minItems" asCount
-  maxItems <- useKey "maxItems" asCount
-
-  if badBounds minItems maxItems
-    then lift $ warn "`minItems` is greater than `maxItems` - the schema is unsatisfiable!"
-    else pure ()
 
   uniqueItems <- useKey "uniqueItems" asFlag
 
