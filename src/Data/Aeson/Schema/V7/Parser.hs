@@ -147,6 +147,13 @@ badBounds smaller bigger = fromMaybe False ((>) <$> smaller <*> bigger)
 asNumberSchema :: SchemaParser pattern r => ParseResult pattern r NumberSchema
 asNumberSchema = do
   multipleOf <- useKey "multipleOf" asNumber
+
+  case multipleOf of
+    Just divisor
+      | divisor <= 0 ->
+      lift $ err "the value of `multipleOf` must be strictly positive!"
+    _ -> pure ()
+
   minimum    <- useKey "minimum" asNumber
   maximum    <- useKey "maximum" asNumber
 
@@ -232,6 +239,13 @@ asObjectSchema = do
   -- TODO: Check these against property names and pattern properties
   required <- useKey "required" (Aeson.BE.eachInArray asPropertyKey)
 
+  case required of
+    Just requiredProperties
+      | requiredProperties /= nub requiredProperties ->
+      lift $ err "the array of `required` properties must contain unique elements!"
+    _ ->
+      pure ()
+
   minProperties <- useKey "minProperties" asCount
   maxProperties <- useKey "maxProperties" asCount
 
@@ -241,7 +255,7 @@ asObjectSchema = do
 
   if maxProperties < (length <$> required)
     then lift $ warn
-          "There are more properties in `requiredProperties` than are allowed by\
+          "There are more properties in `required` than are allowed by\
           \ `maxProperties` - the schema is unsatisfiable!"
     else pure ()
 
@@ -342,6 +356,25 @@ asSchema =
       anyOf <- useKey "anyOf" (Aeson.BE.eachInArray asSchema)
       allOf <- useKey "allOf" (Aeson.BE.eachInArray asSchema)
       oneOf <- useKey "oneOf" (Aeson.BE.eachInArray asSchema)
+
+      case anyOf of
+        Just anyS
+          | null anyS ->
+          lift $ err "the `anyOf` array cannot be empty!"
+        _ -> pure ()
+
+      case allOf of
+        Just allS
+          | null allS ->
+          lift $ err "the `allOf` array cannot be empty!"
+        _ -> pure ()
+
+      case oneOf of
+        Just oneS
+          | null oneS ->
+          lift $ err "the `oneOf` array cannot be empty!"
+        _ -> pure ()
+
       not   <- useKey "not" asSchema
 
       ifThenElse <- asIfThenElseSchema
@@ -440,13 +473,21 @@ asValueSchemas = do
           lift $ warn
             "`const` and `enum` have conflicting values - this schema cannot\
             \ accept any values!"
+    _ -> pure ()
 
-    (_, _) -> pure ()
+  case enumSchema of
+    Just [] ->
+      lift $ warn "the `enum` array is empty - the schema is unsatisfiable!"
+    Just vals
+      | vals /= nub vals ->
+      lift $ warn "the `enum`  contains duplicate values"
+    _ -> pure ()
 
   pure ValueSchemas{..}
 
 asIfThenElseSchema :: SchemaParser pattern r => ParseResult pattern r (Maybe (IfThenElseSchema pattern))
 asIfThenElseSchema = do
+  -- TODO: Avoid data discarding which is going on here
   maybeIfS <- useKey "if" asSchema
   maybeThenS <- useKey "then" asSchema
   maybeElseS <- useKey "else" asSchema
